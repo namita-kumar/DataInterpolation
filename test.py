@@ -19,25 +19,21 @@ def plot_3Dspace(x, fValue, title):
 
 
 n_samples = 1089
-n_evalPoints = 10
+n_evalPoints = 100
 
 space = Space([(0, 1.0), (0, 1.0)])
 
 halton = Halton()
 xData = halton.generate(space, n_samples)
 sampledValue = TestFunctions.franke_function(xData)
-plot_3Dspace(xData, sampledValue, 'Cyclic Product')
-
-# dMatrix = Interpolator.rbf_dist_matrix(xData, xData, 445.21, type="gaussian")
-# functionCoeff = np.matmul(np.linalg.inv(dMatrix), sampledValue)
-dMatrix = Interpolator.rbf_dist_matrix(xData, xData, 1.0, 1.0, type="hardy")
-functionCoeff = np.matmul(np.linalg.inv(dMatrix), sampledValue)
-
-# randomly seelcted evaluation points
 evalPoints = space.rvs(n_evalPoints)
 exactValue = TestFunctions.franke_function(evalPoints)
-# eMatrix = Interpolator.rbf_dist_matrix(evalPoints, xData, 445.21, type="gaussian")
-eMatrix = Interpolator.rbf_dist_matrix(evalPoints, xData, 1.0, 1.0, type="hardy")
-approxValue = np.matmul(eMatrix, functionCoeff)
-rmsError = Interpolator.rms_error(exactValue, approxValue)
-pdb.set_trace()
+plot_3Dspace(xData, sampledValue, 'Franke function')
+
+testRBF = ["gaussian", "hardy"]
+par = [[445.21], [1.0, 1.0]]
+parLB = [[445.21], [1.0, 1.0]]
+parUB = [[445.21], [1.0, 1.0]]
+
+functionCoeff, approxValue, rmsError = Interpolator.interpolate_evaluate(xData, xData, sampledValue, evalPoints, exactValue, par[1], type="hardy")
+print(rmsError)

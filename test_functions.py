@@ -3,13 +3,13 @@ import numpy as np
 
 class TestFunctions:
     @staticmethod
-    def cyclic_product(lowerLimit, upperLimit, x):
+    def cyclic_product(x):
         dim = np.shape(x)[1]
         f_dim = []
         for ndx in range(len(x)):
             ndxValue = 1.0
             for k in range(dim):
-                ndxValue = ndxValue*x[ndx][k]*(upperLimit-x[ndx][k])
+                ndxValue = ndxValue*x[ndx][k]*(1-x[ndx][k])
             ndxValue = 4**dim*ndxValue
             f_dim.append(ndxValue)
         return f_dim
