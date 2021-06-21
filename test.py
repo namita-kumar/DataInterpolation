@@ -30,10 +30,11 @@ evalPoints = space.rvs(n_evalPoints)
 exactValue = TestFunctions.franke_function(evalPoints)
 plot_3Dspace(xData, sampledValue, 'Franke function')
 
-testRBF = ["gaussian", "hardy"]
-par = [[445.21], [1.0, 1.0]]
+listRBF = ["gaussian", "hardy multiquadric", "thin plate splines"]
+par = [[445.21], [1.0, 1.0],[]]
 parLB = [[445.21], [1.0, 1.0]]
 parUB = [[445.21], [1.0, 1.0]]
 
-functionCoeff, approxValue, rmsError = Interpolator.interpolate_evaluate(xData, xData, sampledValue, evalPoints, exactValue, par[1], type="hardy")
-print(rmsError)
+for ndx in range(len(listRBF)):
+    functionCoeff, approxValue, rmsError = Interpolator.interpolate_evaluate(xData, xData, sampledValue, evalPoints, exactValue, par[ndx], type=listRBF[ndx])
+    print("Error under", listRBF[ndx], ":", rmsError)

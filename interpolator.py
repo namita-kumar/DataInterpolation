@@ -21,9 +21,11 @@ class Interpolator:
         distanceMatrix = distance_matrix(data, centers)
         if type == "gaussian":
             distanceMatrix = np.exp(-par[0]*np.power(distanceMatrix, 2))
-        elif type == "hardy":
+        elif type == "hardy multiquadric":
             distanceMatrix = np.power(distanceMatrix, 2) + par[0]**2*np.ones(np.shape(distanceMatrix))
             distanceMatrix = (-1)**(np.ceil(par[1]))*np.power(distanceMatrix, par[1]/2.0)
+        elif type == "thin plate splines":
+            distanceMatrix = np.power(distanceMatrix, 2)*np.log(distanceMatrix + 1e-10*np.ones(np.shape(distanceMatrix)))
         return distanceMatrix
 
     @staticmethod

@@ -4,6 +4,7 @@ import numpy as np
 class TestFunctions:
     @staticmethod
     def cyclic_product(x):
+        # TODO: need to geenralize for space limits other than 1.0
         dim = np.shape(x)[1]
         f_dim = []
         for ndx in range(len(x)):
