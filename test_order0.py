@@ -27,10 +27,11 @@ space = Space([(0, 1.0), (0, 1.0)])
 halton = Halton()
 xData = halton.generate(space, n_samples)
 
-###########################     Order 1 tests       ############################
-sampledValue = TestFunctions.franke_function_wBias(xData)
+###########################     Order 0 tests       ############################
+
+sampledValue = TestFunctions.franke_function(xData)
 evalPoints = space.rvs(n_evalPoints)
-exactValue = TestFunctions.franke_function_wBias(evalPoints)
+exactValue = TestFunctions.franke_function(evalPoints)
 pltFunc = plot_3Dspace(xData, sampledValue, 'Franke function')
 
 # Euclidean distance matrix is the default
@@ -38,8 +39,7 @@ listRBF = ["Euclidean", "Gaussian", "Hardy multiquadric", "Thin plate splines"]
 par = [[], [445.21], [1.0, 1.0], [1.0]]
 
 for ndx in range(len(listRBF)):
-    functionCoeff, approxValue, rmsError = Interpolator.interpolate_evaluate(xData, xData, sampledValue, evalPoints, exactValue, par[ndx], order=1, type=listRBF[ndx])
+    functionCoeff, approxValue, rmsError = Interpolator.interpolate_evaluate(xData, xData, sampledValue, evalPoints, exactValue, par[ndx], type=listRBF[ndx])
     print("Error with", listRBF[ndx], "distance matrix:", "{:.3e}".format(rmsError))
-    print("The coefficients of (1,x,y):", functionCoeff[-3::])
 
 pltFunc.show()
