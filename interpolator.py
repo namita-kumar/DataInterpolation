@@ -51,11 +51,12 @@ class Interpolator:
             Returns:
                 functionCoeff (numpy array): list of coefficients for the selected radial basis functions
         '''
-        Interpolator.approximation_matrix(xData, centers, par, order, type, solving=1)
+        matinv = Interpolator.approximation_matrix(xData, centers, par, order, type, solving=1)
         RHS_value = sampledValue
         if order:
             RHS_value = np.concatenate((RHS_value, np.zeros(Interpolator.numberOfPolyTerms)))
-        functionCoeff = np.matmul(np.linalg.inv(Interpolator.distanceMatrix), RHS_value)
+
+        functionCoeff = np.matmul(matinv, RHS_value)
         return functionCoeff
 
     @classmethod
@@ -67,11 +68,13 @@ class Interpolator:
             self.approxMatrix = np.column_stack((self.rbf_matrix, np.transpose(self.pMatrix)))
             if solving:
                 self.distanceMatrix = np.concatenate((self.approxMatrix, np.column_stack((self.pMatrix,z_matrix))))
+                return np.linalg.inv(Interpolator.distanceMatrix)
         else:
             Interpolator.rbf_dist_matrix(xData, centers, par, type)
             self.approxMatrix = self.rbf_matrix
             if solving:
                 self.distanceMatrix = self.rbf_matrix
+                return np.linalg.inv(Interpolator.distanceMatrix)
 
     @classmethod
     def rbf_dist_matrix(self, data, centers, par, type=None):
@@ -149,33 +152,30 @@ class Interpolator:
         return approxValue
 
     @staticmethod
-    def lagrange_init_functions(centers, centersShape, par, order, type):
+    def lagrange_init_functions(matinv, matinvShape):
         # stores shared data in a global dictionary
-        var_dict['centers'] = centers
-        var_dict['centersShape'] = centersShape
-        var_dict['par'] = par
-        var_dict['order'] = order
-        var_dict['type'] = type
+        var_dict['matinv'] = matinv
+        var_dict['matinvShape'] = matinvShape
 
     @staticmethod
     def lagrange_worker_functions(ndx):
         # generates the lagrange functions for each center
-        centersMem_np = np.frombuffer(var_dict['centers']).reshape(var_dict['centersShape'])
+        matinvMem_np = np.frombuffer(var_dict['matinv']).reshape(var_dict['matinvShape'])
         # print(var_dict['centersShape'])
-        lagrangeRHS = np.zeros(var_dict['centersShape'][0])
+        lagrangeRHS = np.zeros(var_dict['matinvShape'][0])
         lagrangeRHS[ndx] = 1
-        lagrangefunctionCoeff = Interpolator.interpolate(centersMem_np, centersMem_np, lagrangeRHS, var_dict['par'], var_dict['order'], var_dict['type'])
+        lagrangefunctionCoeff = np.matmul(matinvMem_np, lagrangeRHS)
         return lagrangefunctionCoeff
 
     @staticmethod
     def largrange_interpolant_parallel(centers, sampledValue, par, order=None, type=None):
-        output_fname = 'Lagrange_' + type + 'Order' + str(order) + '_'+ str(len(centers)) + 'Centers'+ '.csv'
-        centersMem = RawArray('d', np.shape(centers)[0] * np.shape(centers)[1])
-        centersMem_np = np.frombuffer(centersMem).reshape(np.shape(centers))
-        np.copyto(centersMem_np, np.array(centers))
-        a_pool = Pool(processes=4, initializer=Interpolator.lagrange_init_functions,
-                        initargs=(centersMem, np.shape(centers), par, order, type))
+        matinv = Interpolator.approximation_matrix(centers, centers, par, order, type, solving=1)
+        matinvMem = RawArray('d', np.shape(matinv)[0] * np.shape(matinv)[1])
+        matinvMem_np = np.frombuffer(matinvMem).reshape(np.shape(matinv))
+        np.copyto(matinvMem_np, matinv)
+        a_pool = Pool(processes=4, initializer=Interpolator.lagrange_init_functions, initargs=(matinvMem, np.shape(matinv)))
         lagrangefunctionCoeff = a_pool.map(Interpolator.lagrange_worker_functions, range(np.shape(centers)[0]))
+        output_fname = 'Lagrange_' + type + 'Order' + str(order) + '_'+ str(len(centers)) + 'Centers'+ '.csv'
         with open(output_fname, 'w', newline='') as out:
             csv_out = csv.writer(out)
             for ndx in range(len(lagrangefunctionCoeff)):
@@ -187,15 +187,11 @@ class Interpolator:
     @staticmethod
     def largrange_interpolant(centers, sampledValue, par, order=None, type=None):
         output_fname = 'Lagrange_' + type + 'Order' + str(order) + '_'+ str(len(centers)) + 'Centers'+ '.csv'
+        matinv = Interpolator.approximation_matrix(centers, centers, par, order, type, solving=1)
         with open(output_fname, 'w', newline='') as out:
             csv_out = csv.writer(out)
             for ndx in range(np.shape(centers)[0]):
-                lagrangeRHS = np.zeros(np.shape(centers)[0])
-                lagrangeRHS[ndx] = 1
-                lagrangefunctionCoeff = Interpolator.interpolate(centers, centers, lagrangeRHS, par, order, type)
-                csv_out.writerow(lagrangefunctionCoeff)
-                    # if ndx%100 == 0:
-                    #     print(ndx)
+                csv_out.writerow(matinv[:, ndx])
         # self.approximation_matrix(centers, centers, [])
         # fillDistance, separationRadius = Interpolator.fill_separation_distance(self.approxMatrix)
         # meshRatio = fillDistance/separationRadius
@@ -207,8 +203,9 @@ class Interpolator:
     def largrange_evaluate(centers, sampledValue, evalPoints, lagrange_fname, exactValue, par, order=None, type=None):
         lagrangefunctionCoeff = np.genfromtxt(lagrange_fname, delimiter=',')
         fVal = np.zeros(len(evalPoints))
+        Interpolator.approximation_matrix(evalPoints, centers, par, order, type)
         for ndx in range(np.shape(centers)[0]):
-            largrangeApproxValue = Interpolator.evaluate(evalPoints, lagrangefunctionCoeff[ndx,:], centers, par, order, type)
+            largrangeApproxValue = np.matmul(Interpolator.approxMatrix, lagrangefunctionCoeff[ndx,:])
             fVal = fVal + largrangeApproxValue*sampledValue[ndx]
         rmsError = Utilities.rms_error(fVal, exactValue)
         return fVal, rmsError

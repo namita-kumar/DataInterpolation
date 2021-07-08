@@ -21,7 +21,7 @@ def plot_space(x, fValue, title):
 
 
 if __name__ == "__main__":
-    n_samples = 50
+    n_samples = 3000
     n_evalPoints = 100
 
     space = Space([(0, 1.0), (0, 1.0)])
@@ -39,11 +39,11 @@ if __name__ == "__main__":
     ###########################     Lagrange Interpolant       ################
     startTime = time.time()
     print("Start", startTime)
-    lagrangeFname = Interpolator.largrange_interpolant_parallel(xData, sampledValue, par, order=order, type=type)
-    # lagrangeFname = Interpolator.largrange_interpolant(xData, sampledValue, par, order=order, type=type)
+    # lagrangeFname = Interpolator.largrange_interpolant_parallel(xData, sampledValue, par, order=order, type=type)
+    lagrangeFname = Interpolator.largrange_interpolant(xData, sampledValue, par, order=order, type=type)
     print("End", time.time() - startTime)
     # lagrangeFname = 'Lagrange_GaussianOrder1_2000Centers.csv'
-    '''fVal, rmsError = Interpolator.largrange_evaluate(xData, sampledValue, evalPoints, lagrangeFname, exactValue, par, order=order, type=type)
+    fVal, rmsError = Interpolator.largrange_evaluate(xData, sampledValue, evalPoints, lagrangeFname, exactValue, par, order=order, type=type)
     print('RMS approximation error = ', rmsError)
 
     fig0 = plt.figure()
@@ -59,4 +59,4 @@ if __name__ == "__main__":
     ax1.plot_trisurf(np.array(xData)[:,0], np.array(xData)[:,1], sampledValue, cmap='viridis', edgecolor='none');
     ax2.plot_trisurf(np.array(evalPoints)[:,0], np.array(evalPoints)[:,1], fVal, cmap='viridis', edgecolor='none');
     plt.tight_layout()
-    plt.show()'''
+    plt.show()

@@ -24,4 +24,9 @@ if __name__ == "__main__":
     # number = multiprocessing.Value('d', 0.0)
     # x = multiprocessing.Array('d', x)
     # p = multiprocessing.Process(target=sum_up_to, args=(number, x))
-    # p.start(
+    # p.start()
+    # p.join()
+    # a_pool = multiprocessing.Pool(initializer=sum_up_to,initargs=(x,))
+    a_pool = Pool()
+    result = a_pool.map(sum_up_to, tasks)
+    print(result)
