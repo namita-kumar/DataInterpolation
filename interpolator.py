@@ -2,7 +2,13 @@ import numpy as np
 from scipy.spatial import distance_matrix
 import itertools
 from math import factorial
+from multiprocessing import Pool, Process, RawArray
+import csv
+import os
 import pdb
+
+# A global dictionary for storing shared data for parallel computing
+var_dict = {}
 
 
 class Interpolator:
@@ -26,7 +32,8 @@ class Interpolator:
                 rmsError (float): error in approximation determined at evaPoints
         '''
         functionCoeff = Interpolator.interpolate(xData, centers, sampledValue, par, order, type)
-        approxValue, rmsError = Interpolator.evaluate(evalPoints, functionCoeff, exactValue, centers, par, order, type)
+        approxValue = Interpolator.evaluate(evalPoints, functionCoeff, centers, par, order, type)
+        rmsError = Utilities.rms_error(approxValue, exactValue)
         return functionCoeff, approxValue, rmsError
 
     @staticmethod
@@ -47,7 +54,7 @@ class Interpolator:
         Interpolator.approximation_matrix(xData, centers, par, order, type, solving=1)
         RHS_value = sampledValue
         if order:
-            RHS_value = np.concatenate((RHS_value,np.zeros(Interpolator.numberOfPolyTerms)))
+            RHS_value = np.concatenate((RHS_value, np.zeros(Interpolator.numberOfPolyTerms)))
         functionCoeff = np.matmul(np.linalg.inv(Interpolator.distanceMatrix), RHS_value)
         return functionCoeff
 
@@ -125,14 +132,110 @@ class Interpolator:
         self.pMatrix = np.transpose(mat)
 
     @staticmethod
-    def evaluate(evalPoints, functionCoeff, exactValue, centers, par, order, type):
+    def evaluate(evalPoints, functionCoeff, centers, par, order, type):
+        '''Evaluate the approximated function at specified points
+            Args:
+                evalPoints (numpy array): (N,M) M points of dimension M where the function should be evaluated
+                functionCoeff (numpy array): coefficients of the radial basis functions (and polynomials)
+                centers (numpy array): centers for the radial basis functions
+                par (list): list of parameters for the radial basis function
+                order (int): order of polynomials for approximation
+                type (str): type of radial basis function
+            Returns:
+                approxValue (numpy array): the approximated function evaualted at evalPoints
+        '''
         Interpolator.approximation_matrix(evalPoints, centers, par, order, type)
         approxValue = np.matmul(Interpolator.approxMatrix, functionCoeff)
-        rmsError = np.sqrt(((exactValue - approxValue) ** 2).mean())
-        return approxValue, rmsError
+        return approxValue
+
+    @staticmethod
+    def lagrange_init_functions(centers, centersShape, par, order, type):
+        # stores shared data in a global dictionary
+        var_dict['centers'] = centers
+        var_dict['centersShape'] = centersShape
+        var_dict['par'] = par
+        var_dict['order'] = order
+        var_dict['type'] = type
+
+    @staticmethod
+    def lagrange_worker_functions(ndx):
+        # generates the lagrange functions for each center
+        centersMem_np = np.frombuffer(var_dict['centers']).reshape(var_dict['centersShape'])
+        # print(var_dict['centersShape'])
+        lagrangeRHS = np.zeros(var_dict['centersShape'][0])
+        lagrangeRHS[ndx] = 1
+        lagrangefunctionCoeff = Interpolator.interpolate(centersMem_np, centersMem_np, lagrangeRHS, var_dict['par'], var_dict['order'], var_dict['type'])
+        return lagrangefunctionCoeff
+
+    @staticmethod
+    def largrange_interpolant_parallel(centers, sampledValue, par, order=None, type=None):
+        output_fname = 'Lagrange_' + type + 'Order' + str(order) + '_'+ str(len(centers)) + 'Centers'+ '.csv'
+        centersMem = RawArray('d', np.shape(centers)[0] * np.shape(centers)[1])
+        centersMem_np = np.frombuffer(centersMem).reshape(np.shape(centers))
+        np.copyto(centersMem_np, np.array(centers))
+        a_pool = Pool(processes=4, initializer=Interpolator.lagrange_init_functions,
+                        initargs=(centersMem, np.shape(centers), par, order, type))
+        lagrangefunctionCoeff = a_pool.map(Interpolator.lagrange_worker_functions, range(np.shape(centers)[0]))
+        with open(output_fname, 'w', newline='') as out:
+            csv_out = csv.writer(out)
+            for ndx in range(len(lagrangefunctionCoeff)):
+                csv_out.writerow(lagrangefunctionCoeff[ndx])
+                # if ndx%100 == 0:
+                #     print(ndx)
+        return output_fname
+
+    @staticmethod
+    def largrange_interpolant(centers, sampledValue, par, order=None, type=None):
+        output_fname = 'Lagrange_' + type + 'Order' + str(order) + '_'+ str(len(centers)) + 'Centers'+ '.csv'
+        with open(output_fname, 'w', newline='') as out:
+            csv_out = csv.writer(out)
+            for ndx in range(np.shape(centers)[0]):
+                lagrangeRHS = np.zeros(np.shape(centers)[0])
+                lagrangeRHS[ndx] = 1
+                lagrangefunctionCoeff = Interpolator.interpolate(centers, centers, lagrangeRHS, par, order, type)
+                csv_out.writerow(lagrangefunctionCoeff)
+                    # if ndx%100 == 0:
+                    #     print(ndx)
+        # self.approximation_matrix(centers, centers, [])
+        # fillDistance, separationRadius = Interpolator.fill_separation_distance(self.approxMatrix)
+        # meshRatio = fillDistance/separationRadius
+        # print("Mesh ratio=", meshRatio)
+        # expTerm = distance_matrix(evalPoints, centers)
+        return output_fname
+
+    @staticmethod
+    def largrange_evaluate(centers, sampledValue, evalPoints, lagrange_fname, exactValue, par, order=None, type=None):
+        lagrangefunctionCoeff = np.genfromtxt(lagrange_fname, delimiter=',')
+        fVal = np.zeros(len(evalPoints))
+        for ndx in range(np.shape(centers)[0]):
+            largrangeApproxValue = Interpolator.evaluate(evalPoints, lagrangefunctionCoeff[ndx,:], centers, par, order, type)
+            fVal = fVal + largrangeApproxValue*sampledValue[ndx]
+        rmsError = Utilities.rms_error(fVal, exactValue)
+        return fVal, rmsError
+
+    @staticmethod
+    def fill_separation_distance(distanceMatrix):
+        x = distanceMatrix
+        np.fill_diagonal(x, np.inf)
+        fillDistance = np.max(x.min(axis=0))/2.0
+        separationRadius = np.min(x)/2.0
+        return fillDistance, separationRadius
 
 
 class Utilities:
+
+    @staticmethod
+    def rms_error(value1, value2):
+        ''' Calcualted root mean square error between two arrays value1 and value2
+            Args:
+                value1 (list): array #1
+                value2 (list): array #2
+            Returns:
+                rmsError (float): error between the two arrays
+        '''
+        rmsError = np.sqrt(((value1 - value2) ** 2).mean())
+        return rmsError
+
     @staticmethod
     def n_choose_r(n, r):
         ''' Returns n choose r

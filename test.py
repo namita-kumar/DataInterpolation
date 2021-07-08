@@ -43,3 +43,8 @@ for ndx in range(len(listRBF)):
     print("The coefficients of (1,x,y):", functionCoeff[-3::])
 
 pltFunc.show()
+
+fig = plt.figure()
+ax = fig.add_subplot(projection='3d')
+ax.plot_trisurf(np.array(xData)[:,0], np.array(xData)[:,1], sampledValue, cmap='viridis', edgecolor='none');
+plt.show()
