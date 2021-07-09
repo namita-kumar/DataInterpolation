@@ -21,7 +21,7 @@ def plot_space(x, fValue, title):
 
 
 if __name__ == "__main__":
-    n_samples = 3000
+    n_samples = 300
     n_evalPoints = 100
 
     space = Space([(0, 1.0), (0, 1.0)])
@@ -39,9 +39,8 @@ if __name__ == "__main__":
     ###########################     Lagrange Interpolant       ################
     startTime = time.time()
     print("Start", startTime)
-    # lagrangeFname = Interpolator.largrange_interpolant_parallel(xData, sampledValue, par, order=order, type=type)
     lagrangeFname = Interpolator.largrange_interpolant(xData, sampledValue, par, order=order, type=type)
-    print("End", time.time() - startTime)
+    print("Time taken to find Lagrange functions", time.time() - startTime)
     # lagrangeFname = 'Lagrange_GaussianOrder1_2000Centers.csv'
     fVal, rmsError = Interpolator.largrange_evaluate(xData, sampledValue, evalPoints, lagrangeFname, exactValue, par, order=order, type=type)
     print('RMS approximation error = ', rmsError)
@@ -55,8 +54,15 @@ if __name__ == "__main__":
     plt.ylabel("X2")
     plt.ylim([0, 1])
 
-    fig3D, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 12), subplot_kw={'projection': '3d'})
-    ax1.plot_trisurf(np.array(xData)[:,0], np.array(xData)[:,1], sampledValue, cmap='viridis', edgecolor='none');
-    ax2.plot_trisurf(np.array(evalPoints)[:,0], np.array(evalPoints)[:,1], fVal, cmap='viridis', edgecolor='none');
+    # fig3D, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 12), subplot_kw={'projection': '3d'})
+    # ax1.plot_trisurf(np.array(xData)[:,0], np.array(xData)[:,1], sampledValue, cmap='viridis', edgecolor='none');
+    # errorVal = np.absolute(fVal - exactValue)
+    # ax2.plot_trisurf(np.array(evalPoints)[:,0], np.array(evalPoints)[:,1], errorVal, cmap='viridis', edgecolor='none');
+    # plt.tight_layout()
+    # plt.show()
+    fig3D, ax2 = plt.subplots(1, 1, figsize=(8, 12), subplot_kw={'projection': '3d'})
+    # ax1.plot_trisurf(np.array(xData)[:,0], np.array(xData)[:,1], sampledValue, cmap='viridis', edgecolor='none');
+    errorVal = np.absolute(fVal - exactValue)
+    ax2.plot_trisurf(np.array(evalPoints)[:,0], np.array(evalPoints)[:,1], errorVal, cmap='viridis', edgecolor='none');
     plt.tight_layout()
     plt.show()

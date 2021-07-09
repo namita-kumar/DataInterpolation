@@ -2,13 +2,9 @@ import numpy as np
 from scipy.spatial import distance_matrix
 import itertools
 from math import factorial
-from multiprocessing import Pool, Process, RawArray
+from scipy.spatial import Voronoi
 import csv
-import os
 import pdb
-
-# A global dictionary for storing shared data for parallel computing
-var_dict = {}
 
 
 class Interpolator:
@@ -49,11 +45,14 @@ class Interpolator:
                 type (str): Type of radail basis functions (Euclidean, Gaussian, Multiquadric, or Thin Plate Splines). Default is Euclidean
 
             Returns:
-                functionCoeff (numpy array): list of coefficients for the selected radial basis functions
+                functionCoeff (numpy array): list of coefficients for the selected radial basis functions (and polynomials)
         '''
+        # The equations are of the form [approximation matrix]*[coefficients]=[sampled values]
+        # matinv is the inverse of the approximation matrix
         matinv = Interpolator.approximation_matrix(xData, centers, par, order, type, solving=1)
         RHS_value = sampledValue
         if order:
+            # if polynomial reproduction is desired, add zeros to the RHS
             RHS_value = np.concatenate((RHS_value, np.zeros(Interpolator.numberOfPolyTerms)))
 
         functionCoeff = np.matmul(matinv, RHS_value)
@@ -61,15 +60,26 @@ class Interpolator:
 
     @classmethod
     def approximation_matrix(self, xData, centers, par, order=None, type=None, solving=None):
+        ''' Construct the approximation matrix
+            Returns:
+                inverse of approximation matrix (numpy array)
+        '''
         if order:
+            # if polynomial approximation is desired construct the polynomial matrix
             Interpolator.poly_matrix(xData, order)
+            # get the distance matrix with radial basis functions
             Interpolator.rbf_dist_matrix(xData, centers, par, type)
-            z_matrix = np.zeros((self.numberOfPolyTerms, self.numberOfPolyTerms))
+            # construct the approximation matrix
             self.approxMatrix = np.column_stack((self.rbf_matrix, np.transpose(self.pMatrix)))
             if solving:
-                self.distanceMatrix = np.concatenate((self.approxMatrix, np.column_stack((self.pMatrix,z_matrix))))
+                # if solving for the function coefficients, the approximation matrix should include additional equations
+                # i.e. [coefficients]*[Polynomial matrix] = 0
+                # a matrix of zeroes for padding
+                z_matrix = np.zeros((self.numberOfPolyTerms, self.numberOfPolyTerms))
+                self.distanceMatrix = np.concatenate((self.approxMatrix, np.column_stack((self.pMatrix, z_matrix))))
                 return np.linalg.inv(Interpolator.distanceMatrix)
         else:
+            # no polynomial reproximation
             Interpolator.rbf_dist_matrix(xData, centers, par, type)
             self.approxMatrix = self.rbf_matrix
             if solving:
@@ -89,6 +99,7 @@ class Interpolator:
             Returns:
                 distanceMatrix (numpy array): [m,m] matrix with radial basis functions evaluated with data and centers
         '''
+        # default Euclidean distance matrix
         self.rbf_matrix = distance_matrix(data, centers)
         if type == "Gaussian":
             self.rbf_matrix = np.exp(-par[0]*np.power(self.rbf_matrix, 2))
@@ -153,22 +164,43 @@ class Interpolator:
 
     @staticmethod
     def largrange_interpolant(centers, sampledValue, par, order=None, type=None):
-        output_fname = 'Lagrange_' + type + 'Order' + str(order) + '_'+ str(len(centers)) + 'Centers'+ '.csv'
+        ''' Finds the Lagrange functions about the data points as centers. The function coefficients are written to a csv file
+            Args:
+                centers (numpy array): [n,m] array. m n-dimensional points that are the centers for the radial basis functions
+                sampledValue (numpy array): the result at the sampled points
+                par (list): List of parameters corresponding to the selected radial basis function
+                order (int): order of the polynomials if polynomial reproduction is desired
+                type (str): Type of radial basis functions
+            Returns:
+                output_fname (string): Name of the .csv file with the Lagrange function coefficients
+        '''
+        # Check if the mesh ratio is appropriate
+        fillDistance, separationRadius = Utilities.fill_separation_distance(centers)
+        meshRatio = fillDistance/separationRadius
+        print("Mesh ratio=", meshRatio)
+        if meshRatio>=2.5:
+            print("ERROR: Mesh ratio is not suitable for accurate approximation. Try again.")
+            exit()
+        # Proceed to calculate and save Lagrange functions to a .csv file
+        # Name of the csv file has the type of RBF, order of polynomials, and number of centers
+        output_fname = 'Lagrange_' + type + 'Order' + str(order) + '_' + str(len(centers)) + 'Centers'+ '.csv'
+        # Suppose we wish to find the lagrange funciton centered about k-th data point.
+        # The associated equations are [approximation matrix][coefficients] = [0, 0, ... 0, 1, 0, ... 0] where 1 is in the kth position
+        # Since the approximation matrix doesn't vary from one lagrange function to another, evaluate its inverse here
         matinv = Interpolator.approximation_matrix(centers, centers, par, order, type, solving=1)
         with open(output_fname, 'w', newline='') as out:
             csv_out = csv.writer(out)
             for ndx in range(np.shape(centers)[0]):
+                # [approximation matrix]^{-1} * [0, 0, ... 0, 1, 0, ... 0] is equivalent to getting the kth column
                 csv_out.writerow(matinv[:, ndx])
-        # self.approximation_matrix(centers, centers, [])
-        # fillDistance, separationRadius = Interpolator.fill_separation_distance(self.approxMatrix)
-        # meshRatio = fillDistance/separationRadius
-        # print("Mesh ratio=", meshRatio)
-        # expTerm = distance_matrix(evalPoints, centers)
+
         return output_fname
 
     @staticmethod
     def largrange_evaluate(centers, sampledValue, evalPoints, lagrange_fname, exactValue, par, order=None, type=None):
+        # read Lagrange coefficients from the .csv file
         lagrangefunctionCoeff = np.genfromtxt(lagrange_fname, delimiter=',')
+        # initialize
         fVal = np.zeros(len(evalPoints))
         Interpolator.approximation_matrix(evalPoints, centers, par, order, type)
         for ndx in range(np.shape(centers)[0]):
@@ -176,14 +208,6 @@ class Interpolator:
             fVal = fVal + largrangeApproxValue*sampledValue[ndx]
         rmsError = Utilities.rms_error(fVal, exactValue)
         return fVal, rmsError
-
-    @staticmethod
-    def fill_separation_distance(distanceMatrix):
-        x = distanceMatrix
-        np.fill_diagonal(x, np.inf)
-        fillDistance = np.max(x.min(axis=0))/2.0
-        separationRadius = np.min(x)/2.0
-        return fillDistance, separationRadius
 
 
 class Utilities:
@@ -210,3 +234,13 @@ class Utilities:
             n_choose_r (float): factorial(n)/factorial(r)/factorial(n-r)
         '''
         return factorial(n)/factorial(r)/factorial(n-r)
+
+    @staticmethod
+    def fill_separation_distance(points):
+        voronoiVertices = Voronoi(points)
+        voronoiDistanceMatrix = distance_matrix(voronoiVertices.vertices, points)
+        selfDistanceMatrix = distance_matrix(points, points)
+        np.fill_diagonal(selfDistanceMatrix, np.inf)
+        fillDistance = np.max(voronoiDistanceMatrix.min(axis=0))/2.0
+        separationRadius = np.min(selfDistanceMatrix)/2.0
+        return fillDistance, separationRadius
