@@ -152,39 +152,6 @@ class Interpolator:
         return approxValue
 
     @staticmethod
-    def lagrange_init_functions(matinv, matinvShape):
-        # stores shared data in a global dictionary
-        var_dict['matinv'] = matinv
-        var_dict['matinvShape'] = matinvShape
-
-    @staticmethod
-    def lagrange_worker_functions(ndx):
-        # generates the lagrange functions for each center
-        matinvMem_np = np.frombuffer(var_dict['matinv']).reshape(var_dict['matinvShape'])
-        # print(var_dict['centersShape'])
-        lagrangeRHS = np.zeros(var_dict['matinvShape'][0])
-        lagrangeRHS[ndx] = 1
-        lagrangefunctionCoeff = np.matmul(matinvMem_np, lagrangeRHS)
-        return lagrangefunctionCoeff
-
-    @staticmethod
-    def largrange_interpolant_parallel(centers, sampledValue, par, order=None, type=None):
-        matinv = Interpolator.approximation_matrix(centers, centers, par, order, type, solving=1)
-        matinvMem = RawArray('d', np.shape(matinv)[0] * np.shape(matinv)[1])
-        matinvMem_np = np.frombuffer(matinvMem).reshape(np.shape(matinv))
-        np.copyto(matinvMem_np, matinv)
-        a_pool = Pool(processes=4, initializer=Interpolator.lagrange_init_functions, initargs=(matinvMem, np.shape(matinv)))
-        lagrangefunctionCoeff = a_pool.map(Interpolator.lagrange_worker_functions, range(np.shape(centers)[0]))
-        output_fname = 'Lagrange_' + type + 'Order' + str(order) + '_'+ str(len(centers)) + 'Centers'+ '.csv'
-        with open(output_fname, 'w', newline='') as out:
-            csv_out = csv.writer(out)
-            for ndx in range(len(lagrangefunctionCoeff)):
-                csv_out.writerow(lagrangefunctionCoeff[ndx])
-                # if ndx%100 == 0:
-                #     print(ndx)
-        return output_fname
-
-    @staticmethod
     def largrange_interpolant(centers, sampledValue, par, order=None, type=None):
         output_fname = 'Lagrange_' + type + 'Order' + str(order) + '_'+ str(len(centers)) + 'Centers'+ '.csv'
         matinv = Interpolator.approximation_matrix(centers, centers, par, order, type, solving=1)

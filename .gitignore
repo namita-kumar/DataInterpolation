@@ -1,0 +1,5 @@
+# ignore all csv
+*.xlsx
+*.csv
+*.pyc
+images
