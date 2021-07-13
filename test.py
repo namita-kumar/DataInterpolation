@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from skopt.space import Space
 from skopt.sampler import Halton
+import random
 import pdb
 from test_functions import TestFunctions
 from interpolator import Interpolator
@@ -35,9 +36,10 @@ pltFunc = plot_3Dspace(xData, sampledValue, 'Franke function')
 
 # Euclidean distance matrix is the default
 listRBF = ["Euclidean", "Gaussian", "Hardy multiquadric", "Thin plate splines"]
-par = [[], [445.21], [1.0, 1.0], [1.0]]
+par = [[], [445.21], [0.08708, 1.0], [1.0]]
 
 for ndx in range(len(listRBF)):
+    randpar = random.random()
     functionCoeff, approxValue, rmsError = Interpolator.interpolate_evaluate(xData, xData, sampledValue, evalPoints, exactValue, par[ndx], order=1, type=listRBF[ndx])
     print("Error with", listRBF[ndx], "distance matrix:", "{:.3e}".format(rmsError))
     print("The coefficients of (1,x,y):", functionCoeff[-3::])
@@ -48,3 +50,23 @@ fig = plt.figure()
 ax = fig.add_subplot(projection='3d')
 ax.plot_trisurf(np.array(xData)[:,0], np.array(xData)[:,1], sampledValue, cmap='viridis', edgecolor='none');
 plt.show()
+########################## Hardy Multiquadric tests ###########################
+'''sampledValue = TestFunctions.franke_function_wBias(xData)
+evalPoints = space.rvs(n_evalPoints)
+exactValue = TestFunctions.franke_function_wBias(evalPoints)
+pltFunc = plot_3Dspace(xData, sampledValue, 'Franke function')
+
+err = []
+for ndx in range(100):
+    randpar = random.random()
+    functionCoeff, approxValue, rmsError = Interpolator.interpolate_evaluate(xData, xData, sampledValue, evalPoints, exactValue, [randpar, 1.0], order=1, type="Hardy multiquadric")
+    err.append(rmsError)
+    print("Error with parameter ",randpar," is", "{:.3e}".format(rmsError))
+    print("The coefficients of (1,x,y):", functionCoeff[-3::])
+
+fig = plt.figure()
+plt.hist(err,range=(0,10))
+fig.show()
+fig2 = plt.figure()
+plt.hist(err,range=(0,100))
+plt.show()'''
