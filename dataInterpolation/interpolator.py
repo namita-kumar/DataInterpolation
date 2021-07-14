@@ -8,8 +8,24 @@ import pdb
 
 
 class Interpolator:
-    @staticmethod
-    def interpolate_evaluate(xData, centers, sampledValue, evalPoints, exactValue, par, order=None, type=None):
+    def __init__(self, centers, sampledValue, data=None, par=None, order=None, type=None):
+        ''' TODO: check compatibility between par and type
+        '''
+        self.centers = centers
+        self.sampledValue = sampledValue
+        if data:
+            self.data = data
+        else:
+            self.data = centers
+        self.order = order
+        if par:
+            self.par = par
+        else:
+            self.par = []
+        if type:
+            self.type = type
+
+    def interpolate_evaluate(self, evalPoints, exactValue):
         ''' Approxiamtes a dataset (xData, sampledValue) and determines the error in approximation at evalPoints given the exact values
 
             Args:
@@ -27,13 +43,12 @@ class Interpolator:
                 approxValue (numpy array): the approximated function's values at evalPoints
                 rmsError (float): error in approximation determined at evaPoints
         '''
-        functionCoeff = Interpolator.interpolate(xData, centers, sampledValue, par, order, type)
-        approxValue = Interpolator.evaluate(evalPoints, functionCoeff, centers, par, order, type)
+        functionCoeff = self.interpolate()
+        approxValue = self.evaluate(evalPoints, functionCoeff, self.centers, self.par, self.order, self.type)
         rmsError = Utilities.rms_error(approxValue, exactValue)
         return functionCoeff, approxValue, rmsError
 
-    @staticmethod
-    def interpolate(xData, centers, sampledValue, par, order=None, type=None):
+    def interpolate(self):
         ''' Approxiamtes a dataset (xData, sampledValue)
 
             Args:
@@ -49,26 +64,26 @@ class Interpolator:
         '''
         # The equations are of the form [approximation matrix]*[coefficients]=[sampled values]
         # matinv is the inverse of the approximation matrix
-        matinv = Interpolator.approximation_matrix(xData, centers, par, order, type, solving=1)
-        RHS_value = sampledValue
-        if order:
+        self.approximation_matrix(solving=1)
+        RHS_value = self.sampledValue
+        if self.order:
             # if polynomial reproduction is desired, add zeros to the RHS
-            RHS_value = np.concatenate((RHS_value, np.zeros(Interpolator.numberOfPolyTerms)))
+            RHS_value = np.concatenate((RHS_value, np.zeros(self.numberOfPolyTerms)))
 
-        functionCoeff = np.matmul(matinv, RHS_value)
+        functionCoeff = np.matmul(self.distanceMatrixInverse, RHS_value)
         return functionCoeff
 
-    @classmethod
-    def approximation_matrix(self, xData, centers, par, order=None, type=None, solving=None):
+    def approximation_matrix(self, solving=None):
         ''' Construct the approximation matrix
             Returns:
                 inverse of approximation matrix (numpy array)
         '''
-        if order:
+        self.distanceMatrixInverse = []
+        if self.order:
             # if polynomial approximation is desired construct the polynomial matrix
-            Interpolator.poly_matrix(xData, order)
+            self.poly_matrix()
             # get the distance matrix with radial basis functions
-            Interpolator.rbf_dist_matrix(xData, centers, par, type)
+            self.rbf_dist_matrix()
             # construct the approximation matrix
             self.approxMatrix = np.column_stack((self.rbf_matrix, np.transpose(self.pMatrix)))
             if solving:
@@ -76,18 +91,17 @@ class Interpolator:
                 # i.e. [coefficients]*[Polynomial matrix] = 0
                 # a matrix of zeroes for padding
                 z_matrix = np.zeros((self.numberOfPolyTerms, self.numberOfPolyTerms))
-                self.distanceMatrix = np.concatenate((self.approxMatrix, np.column_stack((self.pMatrix, z_matrix))))
-                return np.linalg.inv(Interpolator.distanceMatrix)
+                distanceMatrix = np.concatenate((self.approxMatrix, np.column_stack((self.pMatrix, z_matrix))))
+                self.distanceMatrixInverse = np.linalg.inv(distanceMatrix)
         else:
             # no polynomial reproximation
-            Interpolator.rbf_dist_matrix(xData, centers, par, type)
+            self.rbf_dist_matrix()
             self.approxMatrix = self.rbf_matrix
             if solving:
-                self.distanceMatrix = self.rbf_matrix
-                return np.linalg.inv(Interpolator.distanceMatrix)
+                distanceMatrix = self.rbf_matrix
+                self.distanceMatrixInverse = np.linalg.inv(distanceMatrix)
 
-    @classmethod
-    def rbf_dist_matrix(self, data, centers, par, type=None):
+    def rbf_dist_matrix(self):
         ''' Generates the distance matrix given a radial basis function and its parameters
 
             Args:
@@ -100,18 +114,17 @@ class Interpolator:
                 distanceMatrix (numpy array): [m,m] matrix with radial basis functions evaluated with data and centers
         '''
         # default Euclidean distance matrix
-        self.rbf_matrix = distance_matrix(data, centers)
-        if type == "Gaussian":
-            self.rbf_matrix = np.exp(-par[0]*np.power(self.rbf_matrix, 2))
-        elif type == "Hardy multiquadric":
-            self.rbf_matrix = np.power(self.rbf_matrix, 2) + par[0]**2*np.ones(np.shape(self.rbf_matrix))
-            self.rbf_matrix = np.power(self.rbf_matrix, par[1]/2.0)
-        elif type == "Thin plate splines":
+        self.rbf_matrix = distance_matrix(self.data, self.centers)
+        if self.type == "Gaussian":
+            self.rbf_matrix = np.exp(-self.par[0]*np.power(self.rbf_matrix, 2))
+        elif self.type == "Hardy multiquadric":
+            self.rbf_matrix = np.power(self.rbf_matrix, 2) + self.par[0]**2*np.ones(np.shape(self.rbf_matrix))
+            self.rbf_matrix = np.power(self.rbf_matrix, self.par[1]/2.0)
+        elif self.type == "Thin plate splines":
             # added regularizing term to avoid taking log of zero
-            self.rbf_matrix = np.power(self.rbf_matrix, 2*par[0])*np.log(self.rbf_matrix + 1e-10*np.ones(np.shape(self.rbf_matrix)))
+            self.rbf_matrix = np.power(self.rbf_matrix, 2*self.par[0])*np.log(self.rbf_matrix + 1e-10*np.ones(np.shape(self.rbf_matrix)))
 
-    @classmethod
-    def poly_matrix(self, data, order):
+    def poly_matrix(self):
         ''' Creates a vandermonde matrix i.e. a matrix with the terms of a polynomial of n variables and m order.
             Given 2 data points with 2 variables [(x_1,y_1),(x_2,y_2)], this function Returns
             [[1, 1], [x_1, x_2], [y_1, y_2], [x_1^2, x_2^2], [y_1^2, y_2^2], [x_1*y_1, x_2*y_2]]
@@ -123,25 +136,25 @@ class Interpolator:
             Retuns:
                 np.transpose(mat) (numpy array): [number of data points, number of polynomial terms] matrix
         '''
-        n = np.shape(data)[1]
+        n = np.shape(self.data)[1]
         mat = []
-        for ndx in range(np.shape(data)[0]):
+        for ndx in range(np.shape(self.data)[0]):
             # Suppose the number of variables is 2 (e.g. (x, y)) and the order is 2
             # the related polynomial terms are 1, x, y, x^2, y^2, xy
             # First: append 1. Note: this is order 0 term
             mat.extend([1])
             # Second: append terms in increasing order.
             # That is, append x, y first followed by x^2, y^2, xy
-            for m in range(1, order+1):
+            for m in range(1, self.order+1):
                 # Given the order of terms we are considering (i.e. m) find all corresponding combination of variables.
                 # E.g. when m=2 and the variables are (x,y), itertools.product returns [(x,x),(y,y,),(x,y)]
-                permute_x = itertools.product(data[ndx], repeat=m)
+                permute_x = itertools.product(self.data[ndx], repeat=m)
                 # Take the product within the list [(x,x),(y,y),(x,y)] to get [x^2, y^2, xy] and then append to list
                 mat.extend(list(map(np.prod, permute_x)))
         # Reshape the list to a 2D matrix. Total number of terms is given by (n+order)C(order)
         # The following gives the matrix [[1,x_1,y_1,x_1^2,y_1^2,x_1*y_1],[1,x_2,y_2,x_2^2,y_2^2,x_2*y_2], ...]
-        self.numberOfPolyTerms = int(Utilities.n_choose_r(n+order, order))
-        mat = np.reshape(mat, (np.shape(data)[0], self.numberOfPolyTerms))
+        self.numberOfPolyTerms = int(Utilities.n_choose_r(n+self.order, self.order))
+        mat = np.reshape(mat, (np.shape(self.data)[0], self.numberOfPolyTerms))
         # We want the transpose of the above matrix
         self.pMatrix = np.transpose(mat)
 
@@ -158,8 +171,10 @@ class Interpolator:
             Returns:
                 approxValue (numpy array): the approximated function evaualted at evalPoints
         '''
-        Interpolator.approximation_matrix(evalPoints, centers, par, order, type)
-        approxValue = np.matmul(Interpolator.approxMatrix, functionCoeff)
+        # creating an instance with the properties
+        evaluator = Interpolator(centers, [], evalPoints, par, order, type)
+        evaluator.approximation_matrix()
+        approxValue = np.matmul(evaluator.approxMatrix, functionCoeff)
         return approxValue
 
     @staticmethod
