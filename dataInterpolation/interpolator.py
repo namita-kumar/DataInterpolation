@@ -10,6 +10,12 @@ import pdb
 class Interpolator:
     def __init__(self, centers, sampledValue, data=None, par=None, order=None, type=None):
         ''' TODO: check compatibility between par and type
+            centers (numpy array): [n,m] array. m n-dimensional points that are the centers for the radial basis functions
+            sampledValue (numpy array): the result at the sampled points
+            data (numpy array): [n,m] array where n is the dimension of the sample space and m is the number of samples. Is equal to centers if not provided.
+            par (list): List of parameters corresponding to the selected radial basis function
+            order (int): order of the polynomials if polynomial reproduction is desired
+            type (str): Type of radail basis functions (Euclidean, Gaussian, Multiquadric, or Thin Plate Splines). Default is Euclidean
         '''
         self.centers = centers
         self.sampledValue = sampledValue
@@ -29,14 +35,8 @@ class Interpolator:
         ''' Approxiamtes a dataset (xData, sampledValue) and determines the error in approximation at evalPoints given the exact values
 
             Args:
-                xData (numpy array): [n,m] array where n is the dimension of the sample space and m is the number of samples.
-                centers (numpy array): [n,m] array. m n-dimensional points that are the centers for the radial basis functions
-                sampledValue (numpy array): the result at the sampled points
                 evalPoints (numpy array): list of points where the approximated function should be evaluated
                 exactValue (numpy array): the actual values at the n_evalPoints
-                par (list): List of parameters corresponding to the selected radial basis function
-                order (int): order of the polynomials if polynomial reproduction is desired
-                type (str): Type of radail basis functions (Euclidean, Gaussian, Multiquadric, or Thin Plate Splines). Default is Euclidean
 
             Returns:
                 functionCoeff (numpy array): list of coefficients for the selected radial basis functions
@@ -50,15 +50,6 @@ class Interpolator:
 
     def interpolate(self):
         ''' Approxiamtes a dataset (xData, sampledValue)
-
-            Args:
-                xData (numpy array): [n,m] array where n is the dimension of the sample space and m is the number of samples.
-                centers (numpy array): [n,m] array. m n-dimensional points that are the centers for the radial basis functions
-                sampledValue (numpy array): the result at the sampled points
-                par (list): List of parameters corresponding to the selected radial basis function
-                order (int): order of the polynomials if polynomial reproduction is desired
-                type (str): Type of radail basis functions (Euclidean, Gaussian, Multiquadric, or Thin Plate Splines). Default is Euclidean
-
             Returns:
                 functionCoeff (numpy array): list of coefficients for the selected radial basis functions (and polynomials)
         '''
@@ -74,9 +65,9 @@ class Interpolator:
         return functionCoeff
 
     def approximation_matrix(self, solving=None):
-        ''' Construct the approximation matrix
-            Returns:
-                inverse of approximation matrix (numpy array)
+        ''' Constructs the approximation matrix with includes the [RBF distance matrix, Polynomial matrix^T]
+            If solving not None, constructs the inverse of the distance matrix for solving the linear equations.
+            i.e. [RBF distance matrix, Polynomial matrix^T; Polynomial matrix, Zeros]
         '''
         self.distanceMatrixInverse = []
         if self.order:
@@ -102,16 +93,9 @@ class Interpolator:
                 self.distanceMatrixInverse = np.linalg.inv(distanceMatrix)
 
     def rbf_dist_matrix(self):
-        ''' Generates the distance matrix given a radial basis function and its parameters
-
-            Args:
-                data (numpy array): [n,m] array where n is the dimension of the sample space and m is the number of samples.
-                centers (numpy array): [n,m] array. m n-dimensional points that are the centers for the radial basis functions
-                par (list): List of parameters corresponding to the selected radial basis function
-                type (str): Type of radail basis functions (Euclidean, Gaussian, Multiquadric, or Thin Plate Splines). Default is Euclidean
-
-            Returns:
-                distanceMatrix (numpy array): [m,m] matrix with radial basis functions evaluated with data and centers
+        ''' Generates the distance matrix given a radial basis function and its parameters.
+            The radial basis functions are evaluated with data and centers.
+            Based on self.type, different radial basis functions are selected.
         '''
         # default Euclidean distance matrix
         self.rbf_matrix = distance_matrix(self.data, self.centers)
@@ -125,16 +109,10 @@ class Interpolator:
             self.rbf_matrix = np.power(self.rbf_matrix, 2*self.par[0])*np.log(self.rbf_matrix + 1e-10*np.ones(np.shape(self.rbf_matrix)))
 
     def poly_matrix(self):
-        ''' Creates a vandermonde matrix i.e. a matrix with the terms of a polynomial of n variables and m order.
+        ''' Creates a vandermonde matrix pMatrix i.e. a matrix with the terms of a polynomial of n variables and m order.
             Given 2 data points with 2 variables [(x_1,y_1),(x_2,y_2)], this function Returns
             [[1, 1], [x_1, x_2], [y_1, y_2], [x_1^2, x_2^2], [y_1^2, y_2^2], [x_1*y_1, x_2*y_2]]
-
-            Args:
-                data (numpy array): [n,m] array where n is the dimension of the sample space and m is the number of samples.
-                order (int): order of the polynomials
-
-            Retuns:
-                np.transpose(mat) (numpy array): [number of data points, number of polynomial terms] matrix
+            The dimension of pMatrix is [number of data points, number of polynomial terms]
         '''
         n = np.shape(self.data)[1]
         mat = []
@@ -177,8 +155,7 @@ class Interpolator:
         approxValue = np.matmul(evaluator.approxMatrix, functionCoeff)
         return approxValue
 
-    @staticmethod
-    def largrange_interpolant(centers, sampledValue, par, order=None, type=None):
+    def largrange_interpolant(self):
         ''' Finds the Lagrange functions about the data points as centers. The function coefficients are written to a csv file
             Args:
                 centers (numpy array): [n,m] array. m n-dimensional points that are the centers for the radial basis functions
@@ -189,25 +166,25 @@ class Interpolator:
             Returns:
                 output_fname (string): Name of the .csv file with the Lagrange function coefficients
         '''
-        # Check if the mesh ratio is appropriate
+        '''# Check if the mesh ratio is appropriate
         fillDistance, separationRadius = Utilities.fill_separation_distance(centers)
         meshRatio = fillDistance/separationRadius
         print("Mesh ratio=", meshRatio)
         if meshRatio>=2.5:
             print("ERROR: Mesh ratio is not suitable for accurate approximation. Try again.")
-            exit()
+            exit()'''
         # Proceed to calculate and save Lagrange functions to a .csv file
         # Name of the csv file has the type of RBF, order of polynomials, and number of centers
-        output_fname = 'Lagrange_' + type + 'Order' + str(order) + '_' + str(len(centers)) + 'Centers'+ '.csv'
+        output_fname = 'Lagrange_' + self.type + 'Order' + str(self.order) + '_' + str(len(self.centers)) + 'Centers'+ '.csv'
         # Suppose we wish to find the lagrange funciton centered about k-th data point.
         # The associated equations are [approximation matrix][coefficients] = [0, 0, ... 0, 1, 0, ... 0] where 1 is in the kth position
         # Since the approximation matrix doesn't vary from one lagrange function to another, evaluate its inverse here
-        matinv = Interpolator.approximation_matrix(centers, centers, par, order, type, solving=1)
+        self.approximation_matrix(solving=1)
         with open(output_fname, 'w', newline='') as out:
             csv_out = csv.writer(out)
-            for ndx in range(np.shape(centers)[0]):
+            for ndx in range(np.shape(self.centers)[0]):
                 # [approximation matrix]^{-1} * [0, 0, ... 0, 1, 0, ... 0] is equivalent to getting the kth column
-                csv_out.writerow(matinv[:, ndx])
+                csv_out.writerow(self.distanceMatrixInverse[:, ndx])
 
         return output_fname
 
@@ -217,11 +194,13 @@ class Interpolator:
         lagrangefunctionCoeff = np.genfromtxt(lagrange_fname, delimiter=',')
         # initialize
         fVal = np.zeros(len(evalPoints))
-        Interpolator.approximation_matrix(evalPoints, centers, par, order, type)
+        evaluator = Interpolator(centers, [], evalPoints, par, order, type)
+        evaluator.approximation_matrix()
         for ndx in range(np.shape(centers)[0]):
-            largrangeApproxValue = np.matmul(Interpolator.approxMatrix, lagrangefunctionCoeff[ndx,:])
+            largrangeApproxValue = np.matmul(evaluator.approxMatrix, lagrangefunctionCoeff[ndx,:])
             fVal = fVal + largrangeApproxValue*sampledValue[ndx]
         rmsError = Utilities.rms_error(fVal, exactValue)
+
         return fVal, rmsError
 
 

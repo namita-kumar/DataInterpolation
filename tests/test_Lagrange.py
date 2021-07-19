@@ -14,7 +14,7 @@ if __name__ == "__main__":
     space = Space([(0, 1.0), (0, 1.0)])
 
     par = [1.0]
-    type = "Thin plate splines"
+    type = 'Thin plate splines'
     order = 1
 
     grid = Grid()
@@ -23,9 +23,10 @@ if __name__ == "__main__":
     evalPoints = space.rvs(n_evalPoints)
     exactValue = TestFunctions.franke_function_wBias(evalPoints)
     ###########################     Lagrange Interpolant       ################
+    obj = Interpolator(xData, sampledValue, par=par, order=order, type=type)
     startTime = time.time()
     print("Start", startTime)
-    lagrangeFname = Interpolator.largrange_interpolant(xData, sampledValue, par, order=order, type=type)
+    lagrangeFname = obj.largrange_interpolant()
     print("Time taken to find Lagrange functions", time.time() - startTime)
     # lagrangeFname = 'Lagrange_GaussianOrder1_2000Centers.csv'
     fVal, rmsError = Interpolator.largrange_evaluate(xData, sampledValue, evalPoints, lagrangeFname, exactValue, par, order=order, type=type)
