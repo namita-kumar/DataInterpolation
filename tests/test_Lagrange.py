@@ -8,10 +8,10 @@ from dataInterpolation.interpolator import Interpolator
 import time
 
 if __name__ == "__main__":
-    n_samples = 1000
+    n_samples = 5000
     n_evalPoints = 100
 
-    space = Space([(0, 1.0), (0, 1.0)])
+    space = Space([(-1.0, 1.0), (-1.0, 1.0)])
 
     par = [1.0]
     type = 'Thin plate splines'
@@ -26,9 +26,10 @@ if __name__ == "__main__":
     obj = Interpolator(xData, sampledValue, par=par, order=order, type=type)
     startTime = time.time()
     print("Start", startTime)
-    lagrangeFname = obj.largrange_interpolant()
+    # lagrangeFname = obj.largrange_interpolant()
+    lagrangeFname = obj.largrange_interpolant_parallel()
     print("Time taken to find Lagrange functions", time.time() - startTime)
-    # lagrangeFname = 'Lagrange_GaussianOrder1_2000Centers.csv'
+    # lagrangeFname = 'Lagrange_Thin plate splinesOrder1_10000Centers.csv'
     fVal, rmsError = Interpolator.largrange_evaluate(xData, sampledValue, evalPoints, lagrangeFname, exactValue, par, order=order, type=type)
     print('RMS approximation error = ', rmsError)
 

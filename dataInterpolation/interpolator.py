@@ -3,9 +3,14 @@ from scipy.spatial import distance_matrix
 import itertools
 from math import factorial
 from scipy.spatial import Voronoi
+from multiprocessing import Pool, Process, RawArray
 import csv
 import pdb
 
+from scipy.spatial.kdtree import KDTree
+
+# A global dictionary for storing shared data for parallel computing
+var_dict = {}
 
 class Interpolator:
     def __init__(self, centers, sampledValue, data=None, par=None, order=None, type=None):
@@ -175,7 +180,7 @@ class Interpolator:
             exit()'''
         # Proceed to calculate and save Lagrange functions to a .csv file
         # Name of the csv file has the type of RBF, order of polynomials, and number of centers
-        output_fname = 'Lagrange_' + self.type + 'Order' + str(self.order) + '_' + str(len(self.centers)) + 'Centers'+ '.csv'
+        output_fname = 'dataDump\Lagrange_' + self.type + 'Order' + str(self.order) + '_' + str(len(self.centers)) + 'Centers'+ '.csv'
         # Suppose we wish to find the lagrange funciton centered about k-th data point.
         # The associated equations are [approximation matrix][coefficients] = [0, 0, ... 0, 1, 0, ... 0] where 1 is in the kth position
         # Since the approximation matrix doesn't vary from one lagrange function to another, evaluate its inverse here
@@ -202,6 +207,53 @@ class Interpolator:
         rmsError = Utilities.rms_error(fVal, exactValue)
 
         return fVal, rmsError
+    
+    @staticmethod
+    def lagrange_init_functions(centers, centersShape, par, order, type, kdtree_setup):
+        # stores shared data in a global dictionary
+        var_dict['centers'] = centers
+        var_dict['centersShape'] = centersShape
+        var_dict['par'] = par
+        var_dict['order'] = order
+        var_dict['type'] = type
+        var_dict['kd_tree'] = kdtree_setup
+
+    @staticmethod
+    def lagrange_worker_functions(ndx):
+        # generates the lagrange functions for each center
+        centersMem_np = np.frombuffer(var_dict['centers']).reshape(var_dict['centersShape'])
+        # print(var_dict['centersShape'])
+        lagrangeRHS = np.zeros(var_dict['centersShape'][0])
+        lagrangeRHS[ndx] = 1
+        #use KD tree to find the neighbors within 10h of ndx-th center
+        kdtree_setup = var_dict['kd_tree']
+        neighbors_ndx = kdtree_setup.query_ball_point(centersMem_np[ndx], 2.0)
+        neighbors = centersMem_np[neighbors_ndx]
+        new_ndx = np.where(np.array(neighbors_ndx)==ndx)[0][0]
+        evaluator = Interpolator(neighbors, [], par=var_dict['par'], order=var_dict['order'], type=var_dict['type'])
+        evaluator.approximation_matrix(solving=1)
+        lagrangefunctionCoeff = np.zeros(len(centersMem_np)+evaluator.numberOfPolyTerms)
+        neighbors_ndx.extend([-3,-2,-1])
+        lagrangefunctionCoeff[neighbors_ndx] = evaluator.distanceMatrixInverse[:, new_ndx]
+        return lagrangefunctionCoeff
+
+    def largrange_interpolant_parallel(self):
+        kdtree_setup = KDTree(self.centers)
+        centersMem = RawArray('d', np.shape(self.centers)[0] * np.shape(self.centers)[1])
+        centersMem_np = np.frombuffer(centersMem).reshape(np.shape(self.centers))
+        np.copyto(centersMem_np, np.array(self.centers))
+        a_pool = Pool(processes=2, initializer=Interpolator.lagrange_init_functions,
+                         initargs=(centersMem, np.shape(self.centers), self.par, self.order, self.type, kdtree_setup))
+        
+        lagrangefunctionCoeff = a_pool.map(Interpolator.lagrange_worker_functions, range(np.shape(self.centers)[0]))
+        output_fname = 'dataDump\Lagrange_' + self.type + 'Order' + str(self.order) + '_'+ str(len(self.centers)) + 'CentersMP'+ '.csv'
+        with open(output_fname, 'w', newline='') as out:
+             csv_out = csv.writer(out)
+             for ndx in range(len(lagrangefunctionCoeff)):
+                 csv_out.writerow(lagrangefunctionCoeff[ndx])
+        return output_fname
+
+
 
 
 class Utilities:

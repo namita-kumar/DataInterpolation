@@ -6,3 +6,4 @@ images
 dataDump
 *__pycache__
 *.egg-info
+.vscode
