@@ -35,6 +35,15 @@ class Interpolator:
             self.par = []
         if type:
             self.type = type
+        # number of points
+        self.n = np.shape(self.data)[0]
+        # dimension
+        self.dim = np.shape(self.data)[1]
+        # number of polynomial terms
+        if order:
+            self.numberOfPolyTerms = int(Utilities.n_choose_r(self.dim+self.order, self.order))
+        else:
+            self.numberOfPolyTerms = 0
 
     def interpolate_evaluate(self, evalPoints, exactValue):
         ''' Approxiamtes a dataset (xData, sampledValue) and determines the error in approximation at evalPoints given the exact values
@@ -136,7 +145,6 @@ class Interpolator:
                 mat.extend(list(map(np.prod, permute_x)))
         # Reshape the list to a 2D matrix. Total number of terms is given by (n+order)C(order)
         # The following gives the matrix [[1,x_1,y_1,x_1^2,y_1^2,x_1*y_1],[1,x_2,y_2,x_2^2,y_2^2,x_2*y_2], ...]
-        self.numberOfPolyTerms = int(Utilities.n_choose_r(n+self.order, self.order))
         mat = np.reshape(mat, (np.shape(self.data)[0], self.numberOfPolyTerms))
         # We want the transpose of the above matrix
         self.pMatrix = np.transpose(mat)
@@ -162,26 +170,13 @@ class Interpolator:
 
     def largrange_interpolant(self):
         ''' Finds the Lagrange functions about the data points as centers. The function coefficients are written to a csv file
-            Args:
-                centers (numpy array): [n,m] array. m n-dimensional points that are the centers for the radial basis functions
-                sampledValue (numpy array): the result at the sampled points
-                par (list): List of parameters corresponding to the selected radial basis function
-                order (int): order of the polynomials if polynomial reproduction is desired
-                type (str): Type of radial basis functions
             Returns:
                 output_fname (string): Name of the .csv file with the Lagrange function coefficients
         '''
-        '''# Check if the mesh ratio is appropriate
-        fillDistance, separationRadius = Utilities.fill_separation_distance(centers)
-        meshRatio = fillDistance/separationRadius
-        print("Mesh ratio=", meshRatio)
-        if meshRatio>=2.5:
-            print("ERROR: Mesh ratio is not suitable for accurate approximation. Try again.")
-            exit()'''
         # Proceed to calculate and save Lagrange functions to a .csv file
         # Name of the csv file has the type of RBF, order of polynomials, and number of centers
         output_fname = 'dataDump\Lagrange_' + self.type + 'Order' + str(self.order) + '_' + str(len(self.centers)) + 'Centers'+ '.csv'
-        # Suppose we wish to find the lagrange funciton centered about k-th data point.
+        # Suppose we wish to find the lagrange function centered about k-th data point.
         # The associated equations are [approximation matrix][coefficients] = [0, 0, ... 0, 1, 0, ... 0] where 1 is in the kth position
         # Since the approximation matrix doesn't vary from one lagrange function to another, evaluate its inverse here
         self.approximation_matrix(solving=1)
@@ -209,48 +204,65 @@ class Interpolator:
         return fVal, rmsError
     
     @staticmethod
-    def lagrange_init_functions(centers, centersShape, par, order, type, kdtree_setup):
+    def lagrange_init_functions(centers, centersShape, lagrangefunctionCoeff, lagrangeCoeffShape, par, order, type, kdtree_setup, NoOfNeighbors):
         # stores shared data in a global dictionary
         var_dict['centers'] = centers
         var_dict['centersShape'] = centersShape
+        var_dict['lagrangefunctionCoeff'] = lagrangefunctionCoeff
+        var_dict['lagrangeCoeffShape'] = lagrangeCoeffShape
         var_dict['par'] = par
         var_dict['order'] = order
         var_dict['type'] = type
         var_dict['kd_tree'] = kdtree_setup
+        var_dict['NoOfNeighbors'] = NoOfNeighbors
 
     @staticmethod
     def lagrange_worker_functions(ndx):
         # generates the lagrange functions for each center
         centersMem_np = np.frombuffer(var_dict['centers']).reshape(var_dict['centersShape'])
-        # print(var_dict['centersShape'])
+        lagrangeMem_np = np.frombuffer(var_dict['lagrangefunctionCoeff']).reshape(var_dict['lagrangeCoeffShape'])
         lagrangeRHS = np.zeros(var_dict['centersShape'][0])
         lagrangeRHS[ndx] = 1
         #use KD tree to find the neighbors within 10h of ndx-th center
         kdtree_setup = var_dict['kd_tree']
-        neighbors_ndx = kdtree_setup.query_ball_point(centersMem_np[ndx], 2.0)
+        _ , neighbors_ndx = kdtree_setup.query(centersMem_np[ndx], var_dict['NoOfNeighbors'])
+        # add the center to the list of neighbors
+        # neighbors_ndx = np.concatenate(([ndx], neighbors_ndx), axis=0)
         neighbors = centersMem_np[neighbors_ndx]
-        new_ndx = np.where(np.array(neighbors_ndx)==ndx)[0][0]
+        new_ndx = 0
         evaluator = Interpolator(neighbors, [], par=var_dict['par'], order=var_dict['order'], type=var_dict['type'])
         evaluator.approximation_matrix(solving=1)
-        lagrangefunctionCoeff = np.zeros(len(centersMem_np)+evaluator.numberOfPolyTerms)
-        neighbors_ndx.extend([-3,-2,-1])
+        if var_dict['order']:
+            lagrangefunctionCoeff = np.zeros(len(centersMem_np)+evaluator.numberOfPolyTerms)
+            neighbors_ndx = np.concatenate((neighbors_ndx, [-3,-2,-1]), axis=0)
+        else:
+            lagrangefunctionCoeff = np.zeros(len(centersMem_np))
         lagrangefunctionCoeff[neighbors_ndx] = evaluator.distanceMatrixInverse[:, new_ndx]
-        return lagrangefunctionCoeff
+        np.copyto(lagrangeMem_np[ndx,:], lagrangefunctionCoeff)
 
-    def largrange_interpolant_parallel(self):
+    def largrange_interpolant_parallel(self, NoOfNeighbors):
+        # set up KD tree
         kdtree_setup = KDTree(self.centers)
+        # store centers in shared memory
         centersMem = RawArray('d', np.shape(self.centers)[0] * np.shape(self.centers)[1])
         centersMem_np = np.frombuffer(centersMem).reshape(np.shape(self.centers))
         np.copyto(centersMem_np, np.array(self.centers))
+
+        # set up shared memory for Lagrange coefficients
+        lagrangeCoeffShape = [self.n+self.numberOfPolyTerms, self.n+self.numberOfPolyTerms]
+        lagrangeCoeffMem = RawArray('d', lagrangeCoeffShape[0] * lagrangeCoeffShape[1])
         a_pool = Pool(processes=2, initializer=Interpolator.lagrange_init_functions,
-                         initargs=(centersMem, np.shape(self.centers), self.par, self.order, self.type, kdtree_setup))
+                         initargs=(centersMem, np.shape(self.centers), lagrangeCoeffMem, lagrangeCoeffShape, self.par, self.order, self.type, kdtree_setup, NoOfNeighbors))
         
-        lagrangefunctionCoeff = a_pool.map(Interpolator.lagrange_worker_functions, range(np.shape(self.centers)[0]))
+        a_pool.map(Interpolator.lagrange_worker_functions, range(np.shape(self.centers)[0]))
+
+        # read pooled results
+        lagrangeMem_np = np.frombuffer(lagrangeCoeffMem).reshape(lagrangeCoeffShape)
         output_fname = 'dataDump\Lagrange_' + self.type + 'Order' + str(self.order) + '_'+ str(len(self.centers)) + 'CentersMP'+ '.csv'
         with open(output_fname, 'w', newline='') as out:
              csv_out = csv.writer(out)
-             for ndx in range(len(lagrangefunctionCoeff)):
-                 csv_out.writerow(lagrangefunctionCoeff[ndx])
+             for ndx in range(len(lagrangeMem_np)):
+                 csv_out.writerow(lagrangeMem_np[ndx,:])
         return output_fname
 
 
@@ -289,4 +301,5 @@ class Utilities:
         np.fill_diagonal(selfDistanceMatrix, np.inf)
         fillDistance = np.max(voronoiDistanceMatrix.min(axis=0))/2.0
         separationRadius = np.min(selfDistanceMatrix)/2.0
+        meshRatio = fillDistance/separationRadius
         return fillDistance, separationRadius
