@@ -5,14 +5,14 @@ from skopt.space import Space
 from skopt.sampler import Grid
 import pdb
 from dataInterpolation.testFunctions import TestFunctions
-from dataInterpolation.interpolator import Interpolator, Utilities
+from dataInterpolation.interpolator import Interpolator
 import time
 
 if __name__ == "__main__":
-    n_samples = 1000
-    n_evalPoints = 100
+    n_samples = 300
+    n_evalPoints = 5
 
-    space = Space([(-1.0, 1.0), (-1.0, 1.0)])
+    space = Space([(0.0, 1.0), (0.0, 1.0)])
 
     par = [1.0]
     type = 'Thin plate splines'
@@ -22,14 +22,17 @@ if __name__ == "__main__":
     xData = grid.generate(space, n_samples)
     # fillDistance, separationRadius = Utilities.fill_separation_distance(xData)
     # print(fillDistance)
-    sampledValue = TestFunctions.wedland22_function(np.array(xData), [0.25,0.25])
+    # sampledValue = TestFunctions.wedland22_function(np.array(xData), [0,0])
+    sampledValue = TestFunctions.cyclic_product(np.array(xData))
     halton = Halton()
     evalPoints = halton.generate(space, n_evalPoints)
-    exactValue = TestFunctions.wedland22_function(np.array(evalPoints), [0.25,0.25])
+    # exactValue = TestFunctions.wedland22_function(np.array(evalPoints), [0,0])
+    exactValue = TestFunctions.cyclic_product(np.array(evalPoints))
     #############       Lagrange Interpolant Parallel       #############
     obj = Interpolator(xData, sampledValue, par=par, order=order, type=type)
     # footprint = np.abs(7*fillDistance*np.log(fillDistance))
-    n_neigbors = int(30*(np.log10(n_samples))**2)
+    # n_neigbors = int(10*(np.log10(n_samples))**2)
+    n_neigbors = 200
     print("Number of neighbors", n_neigbors)
     startTime = time.time()
     print("Start", startTime)

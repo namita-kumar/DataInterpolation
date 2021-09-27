@@ -2,12 +2,11 @@ import numpy as np
 from scipy.spatial import distance_matrix
 import itertools
 from math import factorial
-from scipy.spatial import Voronoi
 from multiprocessing import Pool, Process, RawArray
 import csv
-import pdb
 
 from scipy.spatial.kdtree import KDTree
+from dataInterpolation.utilities import Utilities
 
 # A global dictionary for storing shared data for parallel computing
 var_dict = {}
@@ -169,7 +168,7 @@ class Interpolator:
         return approxValue
 
     def largrange_interpolant(self):
-        ''' Finds the Lagrange functions about the data points as centers. The function coefficients are written to a csv file
+        ''' Finds the Global Lagrange functions about the data points as centers. The function coefficients are written to a csv file
             Returns:
                 output_fname (string): Name of the .csv file with the Lagrange function coefficients
         '''
@@ -190,6 +189,9 @@ class Interpolator:
 
     @staticmethod
     def largrange_evaluate(centers, sampledValue, evalPoints, lagrange_fname, exactValue, par, order=None, type=None):
+        ''' 
+            Reads the lagrange funciton coefficients from a CSV file and quasi interpolates the function at evalPoints
+        '''
         # read Lagrange coefficients from the .csv file
         lagrangefunctionCoeff = np.genfromtxt(lagrange_fname, delimiter=',')
         # initialize
@@ -205,6 +207,9 @@ class Interpolator:
     
     @staticmethod
     def lagrange_init_functions(centers, centersShape, lagrangefunctionCoeff, lagrangeCoeffShape, par, order, type, kdtree_setup, NoOfNeighbors):
+        '''
+            Initializes a global dictionary that can be accessed by all child processes of the lagrange interpolator
+        '''
         # stores shared data in a global dictionary
         var_dict['centers'] = centers
         var_dict['centersShape'] = centersShape
@@ -218,6 +223,9 @@ class Interpolator:
 
     @staticmethod
     def lagrange_worker_functions(ndx):
+        ''' TODO: assigning the coefficients for the polynomial is currently hard coded. Fix this.
+            Finds the coeeficients for the lagrange function at center ndx. The points within the footprint of the Lagrange function are found by querying the KD tree.
+        '''
         # generates the lagrange functions for each center
         centersMem_np = np.frombuffer(var_dict['centers']).reshape(var_dict['centersShape'])
         lagrangeMem_np = np.frombuffer(var_dict['lagrangefunctionCoeff']).reshape(var_dict['lagrangeCoeffShape'])
@@ -241,6 +249,16 @@ class Interpolator:
         np.copyto(lagrangeMem_np[ndx,:], lagrangefunctionCoeff)
 
     def largrange_interpolant_parallel(self, NoOfNeighbors):
+        ''' TODO: Fix it. Why is it so slow?
+            Finds the coefficients for the lagrange functions at a given set of centers. Each lagrange funciton's footprint contains NoOfNeighbors points.
+            The process is parallelized. Each worker function is in charge of finding a different center's Lagrange function. For each center, the NoOfNeighbors points are found using a KD tree.
+            This function sets up the KD tree and stores the same in global dictionary. 
+            The worker functions query this global KD tree. 
+            The coefficients for all Lagrange functions is collected and then storred in a CSV file.
+
+            Returns:
+                output_fname (string): Name of the .csv file with the Lagrange function coefficients
+        '''
         # set up KD tree
         kdtree_setup = KDTree(self.centers)
         # store centers in shared memory
@@ -249,7 +267,7 @@ class Interpolator:
         np.copyto(centersMem_np, np.array(self.centers))
 
         # set up shared memory for Lagrange coefficients
-        lagrangeCoeffShape = [self.n+self.numberOfPolyTerms, self.n+self.numberOfPolyTerms]
+        lagrangeCoeffShape = [self.n, self.n+self.numberOfPolyTerms]
         lagrangeCoeffMem = RawArray('d', lagrangeCoeffShape[0] * lagrangeCoeffShape[1])
         a_pool = Pool(processes=2, initializer=Interpolator.lagrange_init_functions,
                          initargs=(centersMem, np.shape(self.centers), lagrangeCoeffMem, lagrangeCoeffShape, self.par, self.order, self.type, kdtree_setup, NoOfNeighbors))
@@ -265,41 +283,3 @@ class Interpolator:
                  csv_out.writerow(lagrangeMem_np[ndx,:])
         return output_fname
 
-
-
-
-class Utilities:
-
-    @staticmethod
-    def rms_error(value1, value2):
-        ''' Calcualted root mean square error between two arrays value1 and value2
-            Args:
-                value1 (list): array #1
-                value2 (list): array #2
-            Returns:
-                rmsError (float): error between the two arrays
-        '''
-        rmsError = np.sqrt(((value1 - value2) ** 2).mean())
-        return rmsError
-
-    @staticmethod
-    def n_choose_r(n, r):
-        ''' Returns n choose r
-            Args:
-            n (float): Number to choose from
-            r (float): Number of choices
-            Returns:
-            n_choose_r (float): factorial(n)/factorial(r)/factorial(n-r)
-        '''
-        return factorial(n)/factorial(r)/factorial(n-r)
-
-    @staticmethod
-    def fill_separation_distance(points):
-        voronoiVertices = Voronoi(points)
-        voronoiDistanceMatrix = distance_matrix(voronoiVertices.vertices, points)
-        selfDistanceMatrix = distance_matrix(points, points)
-        np.fill_diagonal(selfDistanceMatrix, np.inf)
-        fillDistance = np.max(voronoiDistanceMatrix.min(axis=0))/2.0
-        separationRadius = np.min(selfDistanceMatrix)/2.0
-        meshRatio = fillDistance/separationRadius
-        return fillDistance, separationRadius
