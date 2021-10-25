@@ -9,7 +9,7 @@ from dataInterpolation.interpolator import Interpolator
 import time
 
 if __name__ == "__main__":
-    n_samples = 300
+    n_samples = 100
     n_evalPoints = 5
 
     space = Space([(0.0, 1.0), (0.0, 1.0)])
