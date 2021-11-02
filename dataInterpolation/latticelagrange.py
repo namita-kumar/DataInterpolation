@@ -41,24 +41,16 @@ class LatticeLagrangeInterpolator:
         else: 
             self.type = "Thin plate splines"
             self.par = [1.0]
+        
+        # find the (0,0) point. It should be left bottom point + self.footprintRadius*[1,1] for 2D case
+        self.originPoint = (self.bounds[0] + self.footprintRadius)*np.ones(self.dim)
     
     def lagrange_function_0_0(self):
         '''
             Calculate the (0,0) local lagrange function
         '''
-        # find the (0,0) point. It should be left bottom point + self.footprintRadius*[1,1] for 2D case
-        originPoint = (self.bounds[0] + self.footprintRadius)*np.ones(self.dim)
         # find the points belonging to the lattice centered about (0,0) point
-        centers = Utilities.generate_lattice(originPoint, self.footprintRadius, self.fillDistance)
-        '''x = []
-        y = []
-        for ndx in centers:
-            x.append(ndx[0])
-            y.append(ndx[1])
-        plt.scatter(x,y)
-        plt.xlim(self.bounds[0],self.bounds[1])
-        plt.ylim(self.bounds[0],self.bounds[1])
-        plt.show()'''
+        centers = Utilities.generate_lattice(self.originPoint, self.footprintRadius, self.fillDistance)
         # find the RBF distance matrix for the set of centers within the lattice
         latticeEvaluator = Interpolator(centers, [], par=self.par, order=self.order, type=self.type)
         latticeEvaluator.approximation_matrix()
@@ -73,4 +65,28 @@ class LatticeLagrangeInterpolator:
                 csv_out.writerow(lagrangeCoeff[ndx, :])
         return output_fname
 
-    def eval_lagrange_function_0_0(self):
+    def eval_lagrange_function_0_0(self,evalPoints,fname):
+        # find the points belonging to the lattice centered about (0,0) point
+        centers = Utilities.generate_lattice(self.originPoint, self.footprintRadius, self.fillDistance)
+        latticeEvaluator = Interpolator(centers, [], evalPoints, par=self.par, order=self.order, type=self.type)
+        latticeEvaluator.approximation_matrix()
+        # read Lagrange coefficients from the .csv file
+        lagrangefunctionCoeff = np.genfromtxt(fname, delimiter=',')
+        f_val_allpoints = np.matmul(latticeEvaluator.rbf_matrix,lagrangefunctionCoeff)
+        f_val = f_val_allpoints.sum(axis=1)
+        return f_val
+    
+    def plot_lattice(self):
+        ''' plots the lattice centered about the origin point '''
+        # find the points belonging to the lattice centered about (0,0) point
+        centers = Utilities.generate_lattice(self.originPoint, self.footprintRadius, self.fillDistance)
+        x = []
+        y = []
+        for ndx in centers:
+            x.append(ndx[0])
+            y.append(ndx[1])
+        plt.scatter(x,y)
+        plt.scatter(self.originPoint[0],self.originPoint[1],c='#ff7f0e')
+        plt.xlim(self.bounds[0],self.bounds[1])
+        plt.ylim(self.bounds[0],self.bounds[1])
+        plt.show()

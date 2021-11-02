@@ -65,7 +65,7 @@ class Utilities:
         n = 2*m+1
         # calculate fourier transform for each point in the lattice
         for ndx in range(numOfPOints):
-            # the point of interest is ndx. Convert the index ndx to indices (r,s) where s is the indexing in x-direciton and r is the indexing in y direction
+            # the point of interest is ndx. Convert the index ndx to indices (r,s) where s is the indexing in x-direction and r is the indexing in y direction
             r = int(ndx/m)
             s = int(ndx - r*m)
             y_hat_j_k = 0
@@ -110,5 +110,5 @@ class Utilities:
                 y = np.array(y_j)
             else:
                 y = np.vstack((y, np.array(y_j)))
-            print("Row number = ",j)
+            print("Row number = ",j)    #for debugging
         return y

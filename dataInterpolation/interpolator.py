@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.spatial import distance_matrix
+from scipy.special import jv
 import itertools
 from math import factorial
 from multiprocessing import Pool, Process, RawArray
@@ -119,7 +120,11 @@ class Interpolator:
             self.rbf_matrix = np.power(self.rbf_matrix, self.par[1]/2.0)
         elif self.type == "Thin plate splines":
             # added regularizing term to avoid taking log of zero
+            # TODO: the thin plate spline equation is only for 2D. Must generalize
             self.rbf_matrix = np.power(self.rbf_matrix, 2*self.par[0])*np.log(self.rbf_matrix + 1e-10*np.ones(np.shape(self.rbf_matrix)))
+        elif self.type == "Bessel":
+            # bessel function of the first kind where par[0] is the order
+            self.rbf_matrix = jv(self.par[0],self.rbf_matrix)
 
     def poly_matrix(self):
         ''' Creates a vandermonde matrix pMatrix i.e. a matrix with the terms of a polynomial of n variables and m order.
