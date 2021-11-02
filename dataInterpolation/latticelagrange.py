@@ -47,7 +47,7 @@ class LatticeLagrangeInterpolator:
     
     def lagrange_function_0_0(self):
         '''
-            Calculate the (0,0) local lagrange function
+            Calculate the (0,0) local lagrange function and store coefficients to a csv file
         '''
         # find the points belonging to the lattice centered about (0,0) point
         centers = Utilities.generate_lattice(self.originPoint, self.footprintRadius, self.fillDistance)
@@ -66,6 +66,9 @@ class LatticeLagrangeInterpolator:
         return output_fname
 
     def eval_lagrange_function_0_0(self,evalPoints,fname):
+        '''
+            evaluate the lattice lagrage function at the orgin point
+        '''
         # find the points belonging to the lattice centered about (0,0) point
         centers = Utilities.generate_lattice(self.originPoint, self.footprintRadius, self.fillDistance)
         latticeEvaluator = Interpolator(centers, [], evalPoints, par=self.par, order=self.order, type=self.type)

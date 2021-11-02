@@ -44,6 +44,15 @@ class Utilities:
     
     @staticmethod
     def generate_lattice(pointOfInterest,footprintRadius,fillDistance):
+        '''
+            Returns list of points in a lattice centered around the pointOfInterest
+            Args: 
+                pointOfInterest (2-tuple): This is the center of the desired lattice points
+                footprintRadius (float): Half the width of the lattice
+                fillDistance (float): The distance between two points in the lattice
+            Returns:
+                centers (list of 2-tuples): ordered list of points in the lattice
+        '''
         x = np.arange(pointOfInterest[0]-footprintRadius, pointOfInterest[0]+footprintRadius+fillDistance, fillDistance)
         y = np.arange(pointOfInterest[1]-footprintRadius, pointOfInterest[1]+footprintRadius+fillDistance, fillDistance)
         centers = list(itertools.product(x, y))
