@@ -21,8 +21,8 @@ evalPoints = space.rvs(n_evalPoints)
 exactValue = TestFunctions.franke_function_wBias(evalPoints)
 
 # Euclidean distance matrix is the default
-listRBF = ["Euclidean", "Gaussian", "Hardy multiquadric", "Thin plate splines"]
-par = [[], [445.21], [0.08708, 1.0], [1.0]]
+listRBF = ["Euclidean", "Gaussian", "Hardy multiquadric", "Thin plate splines","Bessel"]
+par = [[], [445.21], [0.08708, 1.0], [1.0], [1.0]]
 
 for ndx in range(len(listRBF)):
     obj = Interpolator(xData, sampledValue, data = xData, par= par[ndx], order=1, type=listRBF[ndx])
